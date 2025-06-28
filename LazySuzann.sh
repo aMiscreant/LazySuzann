@@ -38,20 +38,24 @@ main_menu() {
   echo " 2) 🎯 Exploit Hunt (nmap, nuclei, custom fuzzers)"
   echo " 3) 🧠 PostX (shells, persistence, Mimikatz)"
   echo " 4) 🧪 Payload Forge (build/dropper toolkits)"
-  echo " 5) ⚙️  System Settings (RAM tricks, GPU support)"
-  echo " 6) 📜 View Logs"
-  echo " 7) 💀 Exit"
+  echo " 5) 📡 Bluetooth Exploiter"
+  echo " 6) 🛠️  SQLmap PWN Wrapper"
+  echo " 7) ⚙️  System Settings (RAM tricks, GPU support)"
+  echo " 8) 📜 View Logs"
+  echo " 9) 💀 Exit"
   echo
-  read -p "Choose an option [1-7]: " choice
+  read -p "Choose an option [1-9]: " choice
 
   case $choice in
     1) bash core/wifi_attack.sh ;;
     2) bash core/exploit_fuzzer.sh ;;
     3) bash core/post_exploit_tools.sh ;;
     4) bash core/payload_forge.sh ;;
-    5) bash utils/sys_config.sh ;;
-    6) cat logs/lz_activity.log | less ;;
-    7) echo -e "${RED}Goodbye, Operator.${NC}"; exit 0 ;;
+    5) bash core/exploit_bluetooth.sh ;;
+    6) bash core/exploit_sqlmap.sh ;;
+    7) bash utils/sys_config.sh ;;
+    8) cat logs/lz_activity.log | less ;;
+    9) echo -e "${RED}Goodbye, Operator.${NC}"; exit 0 ;;
     *) echo -e "${RED}Invalid selection, try again.${NC}"; sleep 1; main_menu ;;
   esac
 }

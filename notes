@@ -1,0 +1,12 @@
+cd ~
+git clone https://github.com/thxomas/bdaddr.git
+cd bdaddr
+make
+sudo cp bdaddr /usr/local/bin/
+
+
+clean up caps
+$CAP_FILE_DIR
+set each to cap file dir / setup cleaner
+
+setup deps [requires sudo startup]
